@@ -295,6 +295,7 @@ date_range = f"{df['date'].min():%b %Y} \u2013 {df['date'].max():%b %Y}"
 
 diss = spc["dissolution_30min_pct"]
 n_flagged = int(diss["flags"]["flagged"].sum())
+n_episodes = len(diss["episodes"])
 n_oos = int(diss["flags"]["rules"].str.contains("OOS").sum())
 ppk_full = diss["capability_full_production"]["Ppk"]
 ppk_qual = diss["capability_qualification"]["Ppk"]
@@ -318,8 +319,8 @@ st.markdown(
 c1, c2, c3, c4 = st.columns(4)
 c1.markdown(kpi("Batches monitored", f"{n_batches}", "one row per batch"),
             unsafe_allow_html=True)
-c2.markdown(kpi("Dissolution flags", f"{n_flagged}",
-                f"{n_flagged/n_batches:.0%} of batches", AMBER),
+c2.markdown(kpi("OOC episodes", f"{n_episodes}",
+                f"{n_flagged} flagged batches", AMBER),
             unsafe_allow_html=True)
 c3.markdown(kpi("OOS batches", f"{n_oos}", "below 80% spec", RED),
             unsafe_allow_html=True)
@@ -355,12 +356,31 @@ with tab1:
             "(robust, outlier-trimmed), then held fixed to monitor production."
         )
     with right:
+        eps = r["episodes"]
         flagged = r["flags"][r["flags"]["flagged"]][["batch_id", "value", "rules"]]
-        st.caption(f"{len(flagged)} flagged batches — Western Electric rules 1–4 "
-                   "+ sustained-trend + spec checks")
+        st.caption(
+            f"{len(eps)} out-of-control episode(s) — the process signalled "
+            f"{len(eps)} time(s), collapsing {len(flagged)} flagged batches into "
+            "onsets. Once a process shifts and is not re-centered, every "
+            "subsequent batch flags, so episode onsets — not raw flag counts — "
+            "are what an engineer acts on. Western Electric rules 1–4 + trend + "
+            "spec checks."
+        )
 
+    eps = r["episodes"]
+    if len(eps):
+        show_eps = eps[[
+            "onset_batch", "end_batch", "span", "n_flagged", "peak_severity",
+            "onset_rules",
+        ]].rename(columns={
+            "onset_batch": "Onset", "end_batch": "Last flagged",
+            "span": "Span (batches)", "n_flagged": "Flagged in episode",
+            "peak_severity": "Peak severity", "onset_rules": "Rule(s) at onset",
+        })
+        with st.expander(f"View {len(eps)} episode onset(s)", expanded=True):
+            st.dataframe(show_eps, width="stretch", hide_index=True)
     if len(flagged):
-        with st.expander(f"View {len(flagged)} flagged batches"):
+        with st.expander(f"View all {len(flagged)} flagged batches"):
             st.dataframe(flagged, width="stretch", hide_index=True)
 
 # ---- Tab 2: capability ---------------------------------------------------- #

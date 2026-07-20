@@ -28,16 +28,32 @@ The system was validated against synthetic manufacturing data containing
 
 **Detection rate: 6/6 (100%)** — see [`validate_spc.py`](validate_spc.py) for the reproducible check.
 
-The capability analysis tells the process story in one number:
+Because a process that shifts and is not re-centered flags *every* subsequent
+batch, raw flag counts overstate how many times the process actually signalled.
+The engine therefore collapses consecutive violations into **out-of-control
+episodes** — each with an onset (what an engineer acts on), a span, and a peak
+severity — so the dashboard reports a handful of episode onsets rather than a
+wall of ~100 flagged batches. Detection is scored on whether each planted event
+carries a signal; episodes are how that signal is summarised for action.
+
+The capability analysis tells the process story through the **Ppk collapse and
+the widening Cpk–Ppk gap**:
 
 | Dissolution capability | Qualification | Full production |
 |---|---|---|
-| Cpk (within-sigma) | 2.12 | 2.12 |
-| **Ppk (overall-sigma)** | **1.59** (capable) | **0.74** (not capable) |
+| Cpk (within-σ) | 2.12 | 1.75 |
+| **Ppk (overall-σ)** | **1.59** (capable) | **0.74** (not capable) |
+| Cpk – Ppk gap | 0.53 | 1.01 |
 
-A large Cpk–Ppk gap is the textbook signature of a process that is stable
-short-term but degrading long-term — precisely what the planted drift and lot
-change created, and what the SPC engine caught.
+Within-batch (short-term) variation stays tight, but the sustained mean shift
+from the API lot change nearly doubles the *overall* σ — so Ppk collapses while
+Cpk only dips. The **widening Cpk–Ppk gap is the textbook signature** of a
+process that is capable short-term but unstable over time: exactly what the
+planted drift and lot change created, and what the SPC engine caught. Note that
+Cpk falls too (2.12 → 1.75), not just Ppk — because the mean drifts *toward* the
+lower spec limit. It is a mean shift, not merely added variance, so the "Cpk
+holds constant while Ppk collapses" idealisation doesn't quite apply here; the
+honest signal is the gap.
 
 The ML layer, given **only process parameters and no knowledge of the planted
 events**, independently recovered all three root-cause mechanisms as its top

@@ -130,6 +130,86 @@ def trend_rule(values, run=7):
 
 
 # --------------------------------------------------------------------------- #
+# Episode collapsing (per-batch flags -> out-of-control events)
+# --------------------------------------------------------------------------- #
+# Rule severity ranking, worst first. Used to score an episode's peak state.
+_SEVERITY_ORDER = ["OOS", "WE1", "WE4", "WE2", "WE3", "TREND"]
+
+
+def _peak_severity(rules_concat):
+    """Human-readable worst state seen in a run of rule strings."""
+    if "OOS" in rules_concat:
+        return "out-of-spec"
+    if "WE1" in rules_concat:
+        return "beyond-3-sigma"
+    return "out-of-trend"
+
+
+def episodes(flag_df, reset=3, id_col="batch_id", date_col="date"):
+    """
+    Collapse per-batch flags into out-of-control EPISODES.
+
+    A run of control-rule violations is not N independent events. Once a
+    process shifts and is not re-centered, every subsequent point flags — so
+    counting flagged *batches* massively overstates how many times the process
+    actually signalled. An episode instead opens at the first flagged batch and
+    stays open until `reset` consecutive in-control batches are seen, then
+    closes. This yields the ONSET of each excursion (what an engineer acts on),
+    not a wall of individual flags.
+
+    Returns a DataFrame, one row per episode:
+      onset_batch, onset_date, end_batch, span (batches onset->close),
+      n_flagged (flagged batches within the episode), peak_severity,
+      onset_rules (rules that first fired), rules (all codes seen).
+    """
+    rows = flag_df.reset_index(drop=True)
+    n = len(rows)
+    eps, cur, clean = [], None, 0
+
+    def _close(ep):
+        codes = sorted(
+            {c for c in _SEVERITY_ORDER if c in ep["_all"]},
+            key=_SEVERITY_ORDER.index,
+        )
+        eps.append({
+            "onset_batch": ep["onset_batch"],
+            "onset_date": ep["onset_date"],
+            "end_batch": ep["end_batch"],
+            "span": ep["end_idx"] - ep["onset_idx"] + 1,
+            "n_flagged": ep["n_flagged"],
+            "peak_severity": _peak_severity(ep["_all"]),
+            "onset_rules": ep["onset_rules"],
+            "rules": "; ".join(codes),
+        })
+
+    for i in range(n):
+        flagged = bool(rows["flagged"].iloc[i])
+        rule_str = str(rows["rules"].iloc[i])
+        if flagged:
+            if cur is None:
+                cur = {"onset_idx": i, "onset_batch": rows[id_col].iloc[i],
+                       "onset_date": rows[date_col].iloc[i],
+                       "onset_rules": rule_str, "n_flagged": 0, "_all": ""}
+            cur["n_flagged"] += 1
+            cur["end_idx"] = i
+            cur["end_batch"] = rows[id_col].iloc[i]
+            cur["_all"] += " " + rule_str
+            clean = 0
+        elif cur is not None:
+            clean += 1
+            if clean >= reset:
+                _close(cur)
+                cur, clean = None, 0
+    if cur is not None:
+        _close(cur)
+
+    return pd.DataFrame(eps, columns=[
+        "onset_batch", "onset_date", "end_batch", "span", "n_flagged",
+        "peak_severity", "onset_rules", "rules",
+    ])
+
+
+# --------------------------------------------------------------------------- #
 # Capability
 # --------------------------------------------------------------------------- #
 def capability(values, lsl=None, usl=None, sigma_within=None):
@@ -207,6 +287,7 @@ def run_spc(df, column, baseline_n=80, lsl=None, usl=None, date_col="date",
             "rules": "; ".join(rule_hits),
         })
     flag_df = pd.DataFrame(rows)
+    episode_df = episodes(flag_df, id_col=id_col, date_col=date_col)
 
     cap_qual = capability(baseline, lsl, usl, sigma_within=sigma)
     cap_all = capability(values, lsl, usl, sigma_within=sigma)
@@ -218,4 +299,5 @@ def run_spc(df, column, baseline_n=80, lsl=None, usl=None, date_col="date",
         "capability_qualification": cap_qual,
         "capability_full_production": cap_all,
         "flags": flag_df,
+        "episodes": episode_df,
     }

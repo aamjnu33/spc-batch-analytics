@@ -1,0 +1,7 @@
+event,type,start_batch,affects,note
+tooling_wear_drift,trend,B24-1090,compression_force_kn -> hardness_kp,Gradual upward drift from tooling wear.
+api_lot_change,step_shift,B24-1140,api_d90_um -> dissolution_30min_pct,Coarser API lot API-L0248 lowers dissolution.
+humidity_excursion,oot_spike,B24-1058,room_humidity_pct -> dissolution_30min_pct,Isolated humidity excursion -> dissolution failure risk.
+humidity_excursion,oot_spike,B24-1112,room_humidity_pct -> dissolution_30min_pct,Isolated humidity excursion -> dissolution failure risk.
+humidity_excursion,oot_spike,B24-1176,room_humidity_pct -> dissolution_30min_pct,Isolated humidity excursion -> dissolution failure risk.
+humidity_excursion,oot_spike,B24-1201,room_humidity_pct -> dissolution_30min_pct,Isolated humidity excursion -> dissolution failure risk.

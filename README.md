@@ -1,6 +1,6 @@
 # Batch Process Analytics — SPC × ML for Pharmaceutical Manufacturing
 
-**Live demo:** *(add your Streamlit Cloud URL here after deployment)*
+**Live demo:** **[spc-batch-analytics.streamlit.app](https://spc-batch-analytics.streamlit.app/)**
 
 A Quality-by-Design (QbD) analytics system for solid-oral-dose batch manufacturing
 that answers the two questions every process team asks:

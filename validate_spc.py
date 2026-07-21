@@ -36,11 +36,41 @@ def print_result(result):
           f"sigma={r['sigma']:.3f}")
     cq = r["capability_qualification"]
     ca = r["capability_full_production"]
-    print(f"  Capability @ qualification : Cpk={cq['Cpk']}  Ppk={cq['Ppk']}")
+
+    def _gap(c):
+        if c["Cpk"] is None or c["Ppk"] is None:
+            return None
+        return round(c["Cpk"] - c["Ppk"], 2)
+
+    print(f"  Capability @ qualification : Cpk={cq['Cpk']}  Ppk={cq['Ppk']}  "
+          f"(Cpk-Ppk gap {_gap(cq)})")
     print(f"  Capability @ full production: Cpk={ca['Cpk']}  Ppk={ca['Ppk']}  "
-          f"(<- degradation is the story)")
+          f"(Cpk-Ppk gap {_gap(ca)})")
+    print(f"    story: Ppk collapses and the Cpk-Ppk gap widens as overall sigma "
+          f"inflates ({cq['sigma_overall']} -> {ca['sigma_overall']}).")
+
+    # Cpk's own direction depends on which way the mean moved relative to the
+    # spec, so describe what actually happened rather than assuming it dips.
+    d_cpk = None if (cq["Cpk"] is None or ca["Cpk"] is None) else ca["Cpk"] - cq["Cpk"]
+    move = f"mean {cq['mean']} -> {ca['mean']}"
+    if d_cpk is None:
+        pass
+    elif d_cpk < -0.05:
+        print(f"           Cpk dips too ({cq['Cpk']} -> {ca['Cpk']}) because the "
+              f"{move} drifts toward a spec limit -- a mean shift, not just "
+              f"added variance.")
+    elif d_cpk > 0.05:
+        print(f"           Cpk actually rises ({cq['Cpk']} -> {ca['Cpk']}) here "
+              f"because the {move} moves toward the spec centre; the degradation "
+              f"shows only in Ppk and the widening gap.")
+    else:
+        print(f"           Cpk holds roughly constant ({cq['Cpk']} -> {ca['Cpk']}); "
+              f"the degradation shows in Ppk and the widening gap.")
+
+    ep = r["episodes"]
     n_flagged = int(r["flags"]["flagged"].sum())
-    print(f"  Batches flagged: {n_flagged} / {len(r['flags'])}")
+    print(f"  Out-of-control episodes: {len(ep)}  "
+          f"({n_flagged}/{len(r['flags'])} flagged batches collapsed into onsets)")
 
 
 def main():

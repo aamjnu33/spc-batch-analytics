@@ -7,7 +7,7 @@ Implements the tools a process/quality engineer actually uses:
   - I-MR (Individuals & Moving Range) control charts
   - Robust Phase I baseline establishment (iterative trim of out-of-control pts)
   - Western Electric rules 1-4 (shift/instability detection via sigma zones)
-  - Trend rule (sustained drift, e.g. tooling wear)
+  - Nelson Rule 3 (sustained monotonic trend)
   - Cpk / Ppk process capability indices (within- vs overall-sigma)
 
 Design note: control limits are set from a QUALIFICATION BASELINE (an in-control
@@ -115,17 +115,28 @@ def western_electric(values, center, sigma):
     return flags
 
 
-def trend_rule(values, run=7):
-    """Sustained monotonic run of `run` points (catches gradual drift)."""
+def nelson_rule3(values, k=6):
+    """
+    Nelson Rule 3: `k` points in a row, all steadily increasing or all steadily
+    decreasing — a sustained monotonic trend. k=6 is the textbook default.
+
+    Scope note: a strictly-monotonic rule only fires on trends that are clean
+    relative to the noise. A slow drift whose per-batch step is small compared
+    with the common-cause sigma (e.g. the tooling-wear drift planted in this
+    project, ~1/20 sigma per batch) will NOT trip it — that kind of drift is
+    caught by the runs-based rules (WE Rule 4 / Nelson Rule 2), which accumulate
+    a one-sided signal instead of demanding monotonicity. This rule is here for
+    genuine monotonic trends; it is deliberately not the tooling-wear detector.
+    """
     v = np.asarray(values, dtype=float)
     n = v.size
     flags = {i: [] for i in range(n)}
-    for i in range(run - 1, n):
-        d = np.diff(v[i - run + 1:i + 1])
+    for i in range(k - 1, n):
+        d = np.diff(v[i - k + 1:i + 1])
         if np.all(d > 0):
-            flags[i].append(f"TREND: {run} rising")
+            flags[i].append(f"N3: {k} rising")
         elif np.all(d < 0):
-            flags[i].append(f"TREND: {run} falling")
+            flags[i].append(f"N3: {k} falling")
     return flags
 
 
@@ -133,7 +144,7 @@ def trend_rule(values, run=7):
 # Episode collapsing (per-batch flags -> out-of-control events)
 # --------------------------------------------------------------------------- #
 # Rule severity ranking, worst first. Used to score an episode's peak state.
-_SEVERITY_ORDER = ["OOS", "WE1", "WE4", "WE2", "WE3", "TREND"]
+_SEVERITY_ORDER = ["OOS", "WE1", "WE4", "WE2", "WE3", "N3"]
 
 
 def _peak_severity(rules_concat):
@@ -267,7 +278,7 @@ def run_spc(df, column, baseline_n=80, lsl=None, usl=None, date_col="date",
     ucl, lcl = center + 3 * sigma, center - 3 * sigma
 
     we = western_electric(values, center, sigma)
-    tr = trend_rule(values, run=7)
+    tr = nelson_rule3(values, k=6)
 
     rows = []
     for i in range(len(values)):

@@ -363,8 +363,8 @@ with tab1:
             f"{len(eps)} time(s), collapsing {len(flagged)} flagged batches into "
             "onsets. Once a process shifts and is not re-centered, every "
             "subsequent batch flags, so episode onsets — not raw flag counts — "
-            "are what an engineer acts on. Western Electric rules 1–4 + trend + "
-            "spec checks."
+            "are what an engineer acts on. Western Electric rules 1–4 + "
+            "Nelson-3 trend + spec checks."
         )
 
     eps = r["episodes"]

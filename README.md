@@ -90,7 +90,7 @@ generate_batch_data.py   Synthetic GMP batch data w/ planted events (ground trut
         │
         ▼
 spc_engine.py            I-MR charts · robust Phase-I baseline · Western Electric
-        │                rules 1–4 · trend rule · Cpk/Ppk capability
+        │                rules 1–4 · Nelson Rule 3 trend · Cpk/Ppk capability
         ├──▶ validate_spc.py    Proves 6/6 event detection vs ground truth
         ▼
 ml_drivers.py            XGBoost CQA model · SHAP driver ranking + direction

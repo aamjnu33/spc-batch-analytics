@@ -55,9 +55,11 @@ lower spec limit. It is a mean shift, not merely added variance, so the "Cpk
 holds constant while Ppk collapses" idealisation doesn't quite apply here; the
 honest signal is the gap.
 
-The ML layer, given **only process parameters and no knowledge of the planted
-events**, independently recovered all three root-cause mechanisms as its top
-drivers, with physically correct directionality:
+The ML layer is an **explanatory model** — its job is to rank *which* process
+parameters drive dissolution, not to forecast future batches. Given **only
+process parameters and no knowledge of the planted events**, it recovers all
+three root-cause mechanisms as its top drivers, with physically correct
+directionality:
 
 ![SHAP driver analysis](assets/shap_summary.png)
 
@@ -67,8 +69,28 @@ drivers, with physically correct directionality:
 | 2 | Room humidity | higher → lower dissolution | Humidity excursions |
 | 3 | Compression force | higher → lower dissolution | Tooling-wear drift |
 
-Model performance is honest, not overfit: **test R² = 0.72, 5-fold CV R² = 0.718 ± 0.028**
-(RMSE 2.6% dissolution).
+The third row is the subtle one: tablet **hardness** is deliberately *excluded*
+from the feature set (it is itself a CQA, not a knob you turn). Dissolution
+genuinely depends on hardness — so the model surfaces **compression force**, the
+CPP that *drives* hardness, as the actionable upstream proxy. It found the knob,
+not just the correlate. Recovering these directions is not a discovery (the
+generator's dissolution equation is linear in d90, hardness and humidity by
+construction) — it is a **validation that the SHAP attribution pipeline is
+trustworthy** on a case where the answer is known.
+
+**Performance — reported two honest ways:**
+
+| Validation scheme | R² | What it measures |
+|---|---|---|
+| Random 80/20 split | **0.72** (CV 0.718 ± 0.028, RMSE 2.6%) | Explanatory fit across both API-lot regimes — the right scheme for driver attribution |
+| Time-ordered (train first 80%, predict last 20%) | **0.24** | Forecasting the *next* batches — deliberately reported because it's much lower |
+
+The gap between them is itself informative: within a single production regime
+the dominant driver (API d90) is nearly constant, so once you condition on the
+current lot there is far less *predictable* batch-to-batch variation left. The
+random-split number is not overfit (5-fold CV agrees to ±0.03); it is simply
+answering the attribution question, not the forecasting one — and this project
+is explicit about which is which.
 
 ---
 
@@ -109,11 +131,24 @@ app.py                   Streamlit dashboard (Plotly): control charts,
   SPC discipline, per Montgomery).
 - σ within is estimated as MR̄/d₂ (I-MR, n=2); capability reports both
   Cpk (within) and Ppk (overall) because the *gap* between them is diagnostic.
+- Detection uses Western Electric rules 1–4 plus Nelson Rule 3 and spec checks.
+  A slow drift whose per-batch step is well below the common-cause σ (the planted
+  tooling wear, ~1/20 σ/batch) is caught by **WE Rule 4** (8 points one side of
+  the centerline), *not* by any strictly-monotonic trend rule — Nelson Rule 3 is
+  included for genuine monotonic trends, not oversold as the drift detector.
+  Consecutive violations are collapsed into **out-of-control episodes** (onset +
+  span + peak severity) so a sustained shift reads as one event with an onset,
+  not a wall of individually-flagged batches.
 - The ML feature set includes only CPPs, raw-material and environmental
   inputs — no other CQAs — so importances map to actionable process knobs.
 - Framing follows ICH Q8 (QbD), Q9 (quality risk management), and Q10
   (pharmaceutical quality system): identify CQAs, link them to CPPs, monitor,
   and improve.
+- **Deliberate simplifications** (kept simple on purpose, called out for
+  honesty): dissolution is treated as a single "NLT 80% at 30 min" limit rather
+  than the staged USP S1/S2/S3 acceptance, and content uniformity as a plain
+  %RSD limit rather than the USP <905> Acceptance Value. The SPC/ML methods are
+  the point; the acceptance arithmetic would slot in without changing them.
 
 ## Run it
 

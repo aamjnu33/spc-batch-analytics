@@ -87,6 +87,23 @@ def main():
         scoring="r2",
     )
 
+    # ---- Honest forecasting check: time-ordered holdout ------------------ #
+    # The random split above is the right choice for DRIVER ATTRIBUTION: we want
+    # the model to see both API lots so SHAP can attribute the d90 effect. But a
+    # shuffled split leaks temporal structure, so it is NOT a forecasting score.
+    # Training on the earlier batches and testing on the most recent ones asks
+    # the harder question -- can we predict the *next* batches? -- and scores far
+    # lower, because within a single production regime the dominant driver
+    # (API d90) barely varies. Reporting both keeps the model honest: it is an
+    # explanatory model for process understanding, not a forecaster.
+    cut = int(len(df) * 0.8)
+    model_time = XGBRegressor(
+        n_estimators=400, max_depth=3, learning_rate=0.05, subsample=0.9,
+        colsample_bytree=0.9, random_state=RANDOM_STATE, n_jobs=2,
+    )
+    model_time.fit(X.iloc[:cut], y.iloc[:cut])
+    r2_time = r2_score(y.iloc[cut:], model_time.predict(X.iloc[cut:]))
+
     # ---- Gain importance ------------------------------------------------- #
     gain = pd.Series(model.feature_importances_, index=FEATURES).sort_values(
         ascending=False
@@ -111,6 +128,10 @@ def main():
     lines.append(f"  Test RMSE: {rmse:.3f} %")
     lines.append(f"  Test MAE : {mae:.3f} %")
     lines.append(f"  5-fold CV R^2: {cv.mean():.3f} +/- {cv.std():.3f}")
+    lines.append(f"  Time-ordered R^2 (train first 80%, predict last 20%): {r2_time:.3f}")
+    lines.append("    ^ the forecasting view is much lower because within one API-lot")
+    lines.append("      regime the top driver (d90) is ~constant. This is an EXPLANATORY")
+    lines.append("      model for driver attribution, not a forecaster.")
     lines.append("")
     lines.append("Ranked process drivers (by mean |SHAP|):")
     for f in mean_abs.index:

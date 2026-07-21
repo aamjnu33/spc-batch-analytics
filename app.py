@@ -163,6 +163,16 @@ def train_model(_df):
     rmse = mean_squared_error(yte, pred) ** 0.5
     cv = cross_val_score(model, X, y, cv=KFold(5, shuffle=True, random_state=42),
                          scoring="r2")
+    # Time-ordered holdout: the honest forecasting view (train past, predict
+    # future). Much lower than the random split because d90 barely varies within
+    # one lot regime — reported so the explanatory vs predictive distinction is
+    # explicit rather than hidden.
+    cut = int(len(_df) * 0.8)
+    model_t = XGBRegressor(n_estimators=400, max_depth=3, learning_rate=0.05,
+                           subsample=0.9, colsample_bytree=0.9, random_state=42,
+                           n_jobs=2)
+    model_t.fit(X.iloc[:cut], y.iloc[:cut])
+    r2_time = r2_score(y.iloc[cut:], model_t.predict(X.iloc[cut:]))
     sv = shap.TreeExplainer(model).shap_values(X)
     mean_abs = pd.Series(np.abs(sv).mean(axis=0), index=CPP_FEATURES)
     direction = {}
@@ -175,7 +185,7 @@ def train_model(_df):
         "raises_dissolution_when": [direction[f] for f in CPP_FEATURES],
     }).sort_values("impact", ascending=False).reset_index(drop=True)
     return dict(r2=r2, rmse=rmse, cv_mean=cv.mean(), cv_std=cv.std(),
-                drivers=drivers, yte=yte.to_numpy(), pred=pred)
+                r2_time=r2_time, drivers=drivers, yte=yte.to_numpy(), pred=pred)
 
 
 # --------------------------------------------------------------------------- #
@@ -418,13 +428,15 @@ with tab3:
     with st.spinner("Training XGBoost model and computing SHAP values\u2026"):
         m = train_model(df)
 
-    k = st.columns(3)
-    k[0].markdown(kpi("Test R\u00b2", f"{m['r2']:.2f}", "held-out batches"),
+    k = st.columns(4)
+    k[0].markdown(kpi("Explanatory R\u00b2", f"{m['r2']:.2f}", "random 80/20 split"),
                   unsafe_allow_html=True)
-    k[1].markdown(kpi("RMSE", f"{m['rmse']:.2f}%", "dissolution error"),
-                  unsafe_allow_html=True)
-    k[2].markdown(kpi("5-fold CV R\u00b2", f"{m['cv_mean']:.2f}",
+    k[1].markdown(kpi("5-fold CV R\u00b2", f"{m['cv_mean']:.2f}",
                       f"\u00b1{m['cv_std']:.2f}"), unsafe_allow_html=True)
+    k[2].markdown(kpi("RMSE", f"{m['rmse']:.2f}%", "dissolution error"),
+                  unsafe_allow_html=True)
+    k[3].markdown(kpi("Forecast R\u00b2", f"{m['r2_time']:.2f}",
+                      "time-ordered holdout", MUTED), unsafe_allow_html=True)
 
     st.markdown("##### What drives dissolution?")
     dr = m["drivers"].copy()
@@ -453,9 +465,15 @@ with tab3:
     st.dataframe(show, width="stretch", hide_index=True)
     st.caption(
         "The model was given only process parameters (no knowledge of the "
-        "planted events) yet independently ranks API particle size, humidity, "
-        "and compression force as the top drivers — matching the three root "
-        "causes the SPC engine flagged. SPC finds *when*; ML explains *why*."
+        "planted events) yet ranks API particle size, humidity, and compression "
+        "force as the top drivers — matching the three root causes the SPC "
+        "engine flagged. Tablet hardness is deliberately excluded (it's a CQA, "
+        "not a knob), so the model surfaces **compression force** — the CPP that "
+        "drives hardness — as the actionable upstream proxy. SPC finds *when*; "
+        "ML explains *why*. This is an **explanatory** model for driver "
+        "attribution: the random-split R² answers *which knobs matter*, while "
+        "the lower time-ordered Forecast R² is the honest *predict-the-next-"
+        "batch* view — within one API lot the top driver barely varies."
     )
 
 # ---- Tab 4: batch explorer ----------------------------------------------- #

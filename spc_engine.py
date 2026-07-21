@@ -38,27 +38,34 @@ def moving_range_bar(values):
     return np.mean(np.abs(np.diff(v)))
 
 
-def establish_baseline(values, trim=True):
+def establish_baseline(values, trim=True, max_iter=10):
     """
     Phase I: estimate the in-control center line and within-process sigma.
 
-    If trim=True, performs one iterative pass that removes points beyond the
-    initial 3-sigma limits and recomputes, so an isolated excursion sitting in
-    the baseline window doesn't inflate the limits.
+    If trim=True, iteratively removes points beyond the current 3-sigma limits
+    and recomputes until the kept set stabilizes (or `max_iter` is reached), so
+    an isolated excursion sitting in the baseline window doesn't inflate the
+    limits. On well-behaved data this converges in a single pass; the loop just
+    guarantees a fixed point when one excursion unmasks another.
 
     Returns (center, sigma_within).
     """
     v = np.asarray(values, dtype=float)
-    center = float(np.mean(v))
-    sigma = moving_range_bar(v) / D2
+    kept = v
+    center = float(np.mean(kept))
+    sigma = moving_range_bar(kept) / D2
 
-    if trim and np.isfinite(sigma) and sigma > 0:
-        ucl, lcl = center + 3 * sigma, center - 3 * sigma
-        keep = (v <= ucl) & (v >= lcl)
-        if 2 <= keep.sum() < v.size:          # something was trimmed
-            v_kept = v[keep]
-            center = float(np.mean(v_kept))
-            sigma = moving_range_bar(v_kept) / D2
+    if trim:
+        for _ in range(max_iter):
+            if not (np.isfinite(sigma) and sigma > 0):
+                break
+            ucl, lcl = center + 3 * sigma, center - 3 * sigma
+            keep = (kept <= ucl) & (kept >= lcl)
+            if not (2 <= keep.sum() < kept.size):   # nothing (more) to trim
+                break
+            kept = kept[keep]
+            center = float(np.mean(kept))
+            sigma = moving_range_bar(kept) / D2
     return center, sigma
 
 

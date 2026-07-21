@@ -149,7 +149,6 @@ def generate():
     # ----- Metadata ------------------------------------------------------- #
     api_lot = np.where(idx < LOT_CHANGE, "API-L0231", "API-L0248")
     shift = rng.choice(["A", "B", "C"], size=n)
-    batch_id = [f"B{2024_000 + i:06d}"[:1] + f"{24000 + i}" for i in range(n)]
     batch_id = [f"B24-{1000 + i}" for i in range(n)]
 
     df = pd.DataFrame(

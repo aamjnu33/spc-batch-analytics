@@ -231,11 +231,14 @@ def control_chart(result, df):
                       annotation_text=f"{label} {yval:.2f}",
                       annotation_position="right",
                       annotation_font_size=10, annotation_font_color=col)
-    # spec limits
-    for s, lab in [(r["lsl"], "LSL"), (r["usl"], "USL")]:
+    # spec limits (labels on the right like the control limits, nudged clear:
+    # LSL below its line, USL above, so they don't collide with the y-axis
+    # ticks or the nearest CL/UCL/LCL label)
+    for s, lab, yshift in [(r["lsl"], "LSL", -9), (r["usl"], "USL", 9)]:
         if s is not None:
             fig.add_hline(y=s, line_dash="dot", line_color="#7A2E2E", line_width=1,
-                          annotation_text=f"{lab} {s}", annotation_position="left",
+                          annotation_text=f"{lab} {s}", annotation_position="right",
+                          annotation_yshift=yshift,
                           annotation_font_size=10, annotation_font_color="#7A2E2E")
 
     fig.add_trace(go.Scatter(

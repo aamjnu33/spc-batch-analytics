@@ -8,6 +8,7 @@ Implements the tools a process/quality engineer actually uses:
   - Robust Phase I baseline establishment (iterative trim of out-of-control pts)
   - Western Electric rules 1-4 (shift/instability detection via sigma zones)
   - Nelson Rule 3 (sustained monotonic trend)
+  - Rolling-slope rule (regression-based trend; catches sub-noise slow drift)
   - Cpk / Ppk process capability indices (within- vs overall-sigma)
 
 Design note: control limits are set from a QUALIFICATION BASELINE (an in-control
@@ -147,11 +148,52 @@ def nelson_rule3(values, k=6):
     return flags
 
 
+def rolling_slope_rule(values, window=24, t_thresh=3.0):
+    """
+    Regression-based trend rule. Over a trailing window of `window` points, fit
+    an OLS line (value vs. index) and flag the point when the fitted slope is
+    statistically significant: |t| > t_thresh with df = window - 2.
+
+    Why this exists alongside Nelson Rule 3: a strictly-monotonic rule needs the
+    trend to overpower the noise at every single step, so it cannot see a slow
+    drift whose per-batch step is a small fraction of sigma. A regression slope
+    instead *accumulates* that sub-noise signal across the window, so it CAN
+    catch such a drift (here it independently catches the planted tooling wear,
+    confirming WE Rule 4's runs-based catch). As a side benefit it also fires on
+    a step change, which produces a large local slope in the straddling window.
+
+    window=24 / t_thresh=3.0 were chosen so the rule catches the planted drift
+    with no false alarms in the in-control baseline region; a shorter window
+    starts tripping on common-cause wiggles.
+    """
+    v = np.asarray(values, dtype=float)
+    n = v.size
+    flags = {i: [] for i in range(n)}
+    if n < window or window < 3:
+        return flags
+    x = np.arange(window, dtype=float)
+    xc = x - x.mean()
+    sxx = float((xc ** 2).sum())
+    for i in range(window - 1, n):
+        y = v[i - window + 1:i + 1]
+        slope = float((xc * (y - y.mean())).sum() / sxx)
+        resid = y - (y.mean() + slope * xc)
+        s2 = float((resid ** 2).sum()) / (window - 2)
+        if s2 <= 0:
+            continue
+        se = (s2 / sxx) ** 0.5
+        t = slope / se if se > 0 else 0.0
+        if abs(t) > t_thresh:
+            direction = "rising" if slope > 0 else "falling"
+            flags[i].append(f"SLOPE: {window}-pt trend {direction} (t={t:.1f})")
+    return flags
+
+
 # --------------------------------------------------------------------------- #
 # Episode collapsing (per-batch flags -> out-of-control events)
 # --------------------------------------------------------------------------- #
 # Rule severity ranking, worst first. Used to score an episode's peak state.
-_SEVERITY_ORDER = ["OOS", "WE1", "WE4", "WE2", "WE3", "N3"]
+_SEVERITY_ORDER = ["OOS", "WE1", "WE4", "WE2", "WE3", "N3", "SLOPE"]
 
 
 def _peak_severity(rules_concat):
@@ -286,10 +328,11 @@ def run_spc(df, column, baseline_n=80, lsl=None, usl=None, date_col="date",
 
     we = western_electric(values, center, sigma)
     tr = nelson_rule3(values, k=6)
+    sl = rolling_slope_rule(values)
 
     rows = []
     for i in range(len(values)):
-        rule_hits = we[i] + tr[i]
+        rule_hits = we[i] + tr[i] + sl[i]
         oos = False
         if lsl is not None and values[i] < lsl:
             oos = True

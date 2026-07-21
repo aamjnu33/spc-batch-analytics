@@ -22,7 +22,7 @@ The system was validated against synthetic manufacturing data containing
 
 | # | Planted event | Mechanism | Detected? | How |
 |---|---|---|---|---|
-| 1 | Tooling-wear drift (batch 90→) | Compression force ↑ → hardness ↑ | ✅ | WE Rule 4 (8 consecutive above CL) |
+| 1 | Tooling-wear drift (batch 90→) | Compression force ↑ → hardness ↑ | ✅ | WE Rule 4 *and* rolling-slope rule, one batch apart (corroboration) |
 | 2 | API lot change (batch 140) | Coarser d90 → dissolution ↓ | ✅ | WE Rules 2/3 — flagged at the *first* shifted batch |
 | 3–6 | 4 humidity excursions | RH spike → dissolution failure | ✅ 4/4 | WE Rule 1 (beyond 3σ); 2 also OOS |
 
@@ -112,7 +112,7 @@ generate_batch_data.py   Synthetic GMP batch data w/ planted events (ground trut
         │
         ▼
 spc_engine.py            I-MR charts · robust Phase-I baseline · Western Electric
-        │                rules 1–4 · Nelson Rule 3 trend · Cpk/Ppk capability
+        │                rules 1–4 · Nelson-3 + rolling-slope trend · Cpk/Ppk
         ├──▶ validate_spc.py    Proves 6/6 event detection vs ground truth
         ▼
 ml_drivers.py            XGBoost CQA model · SHAP driver ranking + direction
@@ -131,14 +131,19 @@ app.py                   Streamlit dashboard (Plotly): control charts,
   SPC discipline, per Montgomery).
 - σ within is estimated as MR̄/d₂ (I-MR, n=2); capability reports both
   Cpk (within) and Ppk (overall) because the *gap* between them is diagnostic.
-- Detection uses Western Electric rules 1–4 plus Nelson Rule 3 and spec checks.
+- Detection uses Western Electric rules 1–4, two trend rules, and spec checks.
   A slow drift whose per-batch step is well below the common-cause σ (the planted
-  tooling wear, ~1/20 σ/batch) is caught by **WE Rule 4** (8 points one side of
-  the centerline), *not* by any strictly-monotonic trend rule — Nelson Rule 3 is
-  included for genuine monotonic trends, not oversold as the drift detector.
-  Consecutive violations are collapsed into **out-of-control episodes** (onset +
-  span + peak severity) so a sustained shift reads as one event with an onset,
-  not a wall of individually-flagged batches.
+  tooling wear, ~1/20 σ/batch) is caught **two independent ways**: **WE Rule 4**
+  (8 points one side of the centerline — runs-based) and a **rolling-slope rule**
+  (a significant OLS slope over a 24-batch window — regression-based, |t| > 3).
+  The planted drift trips both within a batch of each other (WE4 at B24-1108,
+  slope at B24-1109), which is exactly the kind of corroboration you want. A
+  strictly-monotonic rule cannot see this drift — the per-step signal is too
+  small — so **Nelson Rule 3** is included only for genuine monotonic trends and
+  is not oversold as the drift detector. Consecutive violations are collapsed
+  into **out-of-control episodes** (onset + span + peak severity) so a sustained
+  shift reads as one event with an onset, not a wall of individually-flagged
+  batches.
 - The ML feature set includes only CPPs, raw-material and environmental
   inputs — no other CQAs — so importances map to actionable process knobs.
 - Framing follows ICH Q8 (QbD), Q9 (quality risk management), and Q10

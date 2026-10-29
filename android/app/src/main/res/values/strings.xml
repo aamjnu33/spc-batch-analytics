@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SPC Batch</string>
+    <string name="app_url">https://spc-batch-analytics.streamlit.app/</string>
+</resources>

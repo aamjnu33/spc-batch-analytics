@@ -185,3 +185,18 @@ development and manufacturing — the statistics, the vocabulary, and the
 regulatory framing — implemented end-to-end in Python.
 
 *All data is synthetic. No proprietary or GMP data was used.*
+
+---
+
+## Android app (personal, not on Play Store)
+
+[`android/`](android/) is a minimal Android app that opens the live dashboard
+full-screen (pull down to refresh, back button navigates, external links open
+in the browser). GitHub Actions builds it on every change under `android/`.
+
+**Install on your phone:**
+1. On the phone, open this repo's **Releases → "Android app (latest)"** and tap `SPC-Batch.apk`.
+2. Allow your browser to *install unknown apps* when prompted, then tap **Install**.
+3. If Play Protect warns about an unknown developer, choose **Install anyway**.
+
+New builds install over the old one (the signing key is fixed in `android/app/debug.keystore`).
